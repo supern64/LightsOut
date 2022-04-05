@@ -54,8 +54,7 @@ fn main() {
             Ok(rustbox::Event::KeyEvent(key)) => {
                 match key {
                     rustbox::Key::Char('q') => break,
-                    rustbox::Key::Char('r') => { reset(&mut game) },
-                    rustbox::Key::Char('c') => { clear_board(&mut game.board) },
+                    rustbox::Key::Char('r') => { reset(&mut game) }
                     _ => {}
                 }
             }
