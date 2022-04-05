@@ -53,8 +53,8 @@ fn main() {
         
         // draw routines
         draw_background(&rustbox);
-        draw_hud(&game, &rustbox);
         draw_table(&game, &rustbox);
+        draw_hud(&game, &rustbox);
         
         rustbox.present();
 
@@ -147,10 +147,12 @@ fn handle_key_press(game: &mut Game, system: u16, key: char) {
                 }
             } else { // if not, check if it's a valid position and press it if so
                 if game.input_buffer.chars().count() >= 2 {
-                    let row = game.input_buffer.chars().nth(0).unwrap() as usize - 65;
-                    let parsed = game.input_buffer[1..].parse::<usize>();
-                    if parsed.is_err() { return; }
-                    let col = parsed.unwrap() - 1;
+                    let parsed_row = game.input_buffer.chars().nth(0).unwrap();
+                    if !parsed_row.is_alphabetic() { return; }
+                    let row = parsed_row as usize - 65;
+                    let parsed_col = game.input_buffer[1..].parse::<usize>();
+                    if parsed_col.is_err() { return; }
+                    let col = parsed_col.unwrap() - 1;
                     if row < BOARD_SIZE && col < BOARD_SIZE && !game.has_won {
                         press_button(&mut game.board, row as usize, col as usize);
                         game.moves += 1;
