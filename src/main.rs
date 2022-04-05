@@ -5,7 +5,7 @@ use std::time::Duration;
 use rand::distributions::{Distribution, Uniform};
 use rustbox::{Color, RustBox, InitOptions};
 
-const BOARD_SIZE: usize = 5;
+const BOARD_SIZE: usize = 5; // 12 is the most you want to go
 const BOARD_RENDER_LOCATION: (f32, f32, f32, f32) = (18.0, 1.0, 42.0, 21.0);
 
 struct RenderCalculation {
@@ -14,7 +14,11 @@ struct RenderCalculation {
 }
 
 struct Game {
+    message: String,
+    input_buffer: String,
     has_won: bool,
+    exit: bool,
+    keyboard_mode: bool,
     mouse_released: bool,
     moves: i32,
     board: [[bool; BOARD_SIZE]; BOARD_SIZE],
@@ -31,7 +35,11 @@ fn main() {
     };
     
     let mut game: Game = Game { 
+        message: "Welcome!".to_string(),
+        input_buffer: "".to_string(),
+        keyboard_mode: false,
         has_won: false,
+        exit: false,
         mouse_released: true,
         moves: 0,
         board: [[false; BOARD_SIZE]; BOARD_SIZE],
@@ -50,18 +58,18 @@ fn main() {
         
         rustbox.present();
 
-        match rustbox.peek_event(Duration::from_millis(1), false) {
-            Ok(rustbox::Event::KeyEvent(key)) => {
-                match key {
-                    rustbox::Key::Char('q') => break,
-                    rustbox::Key::Char('r') => { reset(&mut game) }
-                    _ => {}
-                }
-            }
+        match rustbox.peek_event(Duration::from_millis(1), true) {
+            Ok(rustbox::Event::KeyEventRaw(_, system, ascii)) => {
+                handle_key_press(&mut game, system, ascii as u8 as char);
+                if game.exit { break; }
+            },
             Ok(rustbox::Event::MouseEvent(mouse, x, y)) => {
                 match mouse {
                     rustbox::Mouse::Left => {
-                        mouse_left_click(&mut game, x, y);
+                        if !game.keyboard_mode {
+                            handle_left_click(&mut game, x, y);
+                        }
+                        game.mouse_released = false;
                     },
                     rustbox::Mouse::Release => {
                         game.mouse_released = true;
@@ -107,7 +115,58 @@ fn reset(game: &mut Game) {
     generate_board(&mut game.board);
 }
 
-fn mouse_left_click(game: &mut Game, x: i32, y: i32) {
+fn handle_command(game: &mut Game, command: &str) -> bool {
+    match command {
+        "Q" => { game.exit = true; true },
+        "R" => { reset(game); true },
+        "K" => { 
+            if BOARD_SIZE > 26 && !game.keyboard_mode {
+                game.message = "Board size is too large for keyboard mode!".to_string();
+            } else {
+                game.keyboard_mode = !game.keyboard_mode; 
+                game.message = format!("Switched to {} mode.", if game.keyboard_mode { "keyboard" } else { "mouse" }).to_string();
+            }   
+            true             
+        },
+        _ => { false }
+    }
+}
+
+fn handle_key_press(game: &mut Game, system: u16, key: char) {
+    if !game.keyboard_mode {
+        handle_command(game, &key.to_uppercase().to_string());
+    } else {
+        // append it to the input buffer
+        if key as u8 != 0 {
+            game.input_buffer.push(key.to_uppercase().to_string().chars().next().unwrap());
+            // check if it's a command
+            if game.input_buffer.starts_with(":") {
+                let command = game.input_buffer[1..].to_string();
+                if handle_command(game, &command) {
+                    game.input_buffer = "".to_string();
+                }
+            } else { // if not, check if it's a valid position and press it if so
+                if game.input_buffer.chars().count() >= 2 {
+                    let row = game.input_buffer.chars().nth(0).unwrap() as usize - 65;
+                    let parsed = game.input_buffer[1..].parse::<usize>();
+                    if parsed.is_err() { return; }
+                    let col = parsed.unwrap() - 1;
+                    if row < BOARD_SIZE && col < BOARD_SIZE && !game.has_won {
+                        press_button(&mut game.board, row as usize, col as usize);
+                        game.moves += 1;
+                        game.has_won = game.board.iter().all(|&row| {row.iter().all(|&block| !block)});
+                        game.input_buffer = "".to_string();
+                    }
+                }
+            }
+        } else if system == 127 { // backspace
+            game.input_buffer.pop();
+        }
+        
+    }
+}
+
+fn handle_left_click(game: &mut Game, x: i32, y: i32) {
     let tbl = get_block_location(game, x as usize, y as usize);
     // check if it's in the table in the first place
     if x as f32 > game.render.scaled_table.0.ceil() && x as f32 <= game.render.scaled_table.0.ceil() + game.render.scaled_table.2.ceil() {
@@ -119,7 +178,6 @@ fn mouse_left_click(game: &mut Game, x: i32, y: i32) {
             }
         }
     }
-    game.mouse_released = false;
 }
 
 fn press_button(board: &mut [[bool; BOARD_SIZE]; BOARD_SIZE], x: usize, y: usize) {
@@ -207,32 +265,29 @@ fn draw_right_text(y: usize, rustbox: &RustBox, color: Color, text: &str) {
 // draw routines (real)
 fn draw_hud(game: &Game, rustbox: &RustBox) {
     if game.has_won {
-        rustbox.print(0, 0, rustbox::RB_BOLD, Color::White, Color::Black, format!("You won with {} moves! Press 'r' to reset.", game.moves).as_str());
+        rustbox.print(0, 0, rustbox::RB_BOLD, Color::White, Color::Black, format!("You won with {} moves! {} to reset.", game.moves, if game.keyboard_mode { "Type :R" } else { "Press 'r'"}).as_str());
     } else {
         rustbox.print(0, 0, rustbox::RB_BOLD, Color::White, Color::Black, format!("Moves: {}", game.moves).as_str());
     }
-    draw_right_text(0, &rustbox, Color::White, "Press 'q' to quit.");
+    rustbox.print(0, rustbox.height() - 1, rustbox::RB_BOLD, Color::White, Color::Black, game.input_buffer.as_str());
+    draw_right_text(0, &rustbox, Color::White, format!("{} to quit.", if game.keyboard_mode { "Type :Q" } else { "Press 'q'" }).as_str());
+    draw_right_text(rustbox.height() - 1, &rustbox, Color::White, game.message.as_str());
 }
 
 fn draw_table(game: &Game, rustbox: &RustBox) {
-    // draw outline of table
-    for i in 0..BOARD_SIZE {
-        for j in 0..BOARD_SIZE {
-            let location = get_block_render_location(game, i, j);
-            hollow_rect(location.0, location.1, location.2, location.3, rustbox, Color::White);
-        }
-    }
-
-    // draw the blocks that are lit :fire:
-    for i in 0..BOARD_SIZE {
-        for j in 0..BOARD_SIZE {
-            if game.board[i][j] {
-                let location = get_block_render_location(game, i, j);
+    for x in 0..BOARD_SIZE {
+        for y in 0..BOARD_SIZE {
+            let location = get_block_render_location(game, x, y);
+            hollow_rect(location.0, location.1, location.2, location.3, rustbox, Color::White); // draw outline of table
+            if game.board[x][y] { // draw lit blocks :fire:
                 fill_rect(location.0 + 2, location.1 + 1, location.2 - 3, location.3 - 1, rustbox, Color::White);
+            }
+            if game.keyboard_mode {  // draw row and column numbers
+                let block = ((x + 65) as u8 as char).to_string() + &(y + 1).to_string();
+                rustbox.print(location.0 + (location.2 / 2), location.1, rustbox::RB_NORMAL, Color::White, Color::Black, block.as_str());
             }
         }
     }
-    
 }
 
 fn draw_background(rustbox: &RustBox) {
