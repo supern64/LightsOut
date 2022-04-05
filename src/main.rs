@@ -248,7 +248,7 @@ fn hollow_rect(x: usize, y: usize, w: usize, h: usize, rustbox: &RustBox, color:
     for i in x+1..(x + w) {
         rustbox.print_char(i, y, rustbox::RB_NORMAL, color, Color::Black,  '─');
         rustbox.print_char(i, y+h, rustbox::RB_NORMAL, color, Color::Black,  '─');
-    }// draw initial table
+    }
     for i in y+1..(y + h) {
         rustbox.print_char(x, i, rustbox::RB_NORMAL, color, Color::Black,  '│');
         rustbox.print_char(x+w, i, rustbox::RB_NORMAL, color, Color::Black,  '│');
