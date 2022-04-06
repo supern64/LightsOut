@@ -136,33 +136,44 @@ fn handle_key_press(game: &mut Game, system: u16, key: char) {
     if !game.keyboard_mode {
         handle_command(game, &key.to_uppercase().to_string());
     } else {
-        // append it to the input buffer
-        if key as u8 != 0 {
+        if key as u8 != 0 { // append it to the input buffer
             game.input_buffer.push(key.to_uppercase().to_string().chars().next().unwrap());
+        } else if system == 127 { // backspace
+            game.input_buffer.pop();
+        } else if system == 13 { // enter
             // check if it's a command
             if game.input_buffer.starts_with(":") {
                 let command = game.input_buffer[1..].to_string();
                 if handle_command(game, &command) {
                     game.input_buffer = "".to_string();
+                } else {
+                    game.message = "Invalid command!".to_string();
                 }
             } else { // if not, check if it's a valid position and press it if so
-                if game.input_buffer.chars().count() >= 2 {
+                if game.input_buffer.chars().count() >= 2 && !game.has_won {
                     let parsed_row = game.input_buffer.chars().nth(0).unwrap();
-                    if !parsed_row.is_alphabetic() { return; }
+                    if !parsed_row.is_alphabetic() { 
+                        game.message = "Invalid position!".to_string();
+                        return; 
+                    }
                     let row = parsed_row as usize - 65;
                     let parsed_col = game.input_buffer[1..].parse::<usize>();
-                    if parsed_col.is_err() { return; }
+                    if parsed_col.is_err() { 
+                        game.message = "Invalid position!".to_string();
+                        return; 
+                    }
                     let col = parsed_col.unwrap() - 1;
-                    if row < BOARD_SIZE && col < BOARD_SIZE && !game.has_won {
+
+                    if row < BOARD_SIZE && col < BOARD_SIZE {
                         press_button(&mut game.board, row as usize, col as usize);
                         game.moves += 1;
                         game.has_won = game.board.iter().all(|&row| {row.iter().all(|&block| !block)});
                         game.input_buffer = "".to_string();
+                    } else {
+                        game.message = "Invalid position!".to_string();
                     }
                 }
             }
-        } else if system == 127 { // backspace
-            game.input_buffer.pop();
         }
         
     }
